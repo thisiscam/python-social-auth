@@ -194,6 +194,7 @@ AUTHENTICATION_BACKENDS = (
     'social.backends.vimeo.VimeoOAuth1',
     'social.backends.lastfm.LastFmAuth',
     'social.backends.moves.MovesOAuth2',
+    'social.backends.wechat.WechatOAuth2',
     'social.backends.email.EmailAuth',
     'social.backends.username.UsernameAuth',
     'django.contrib.auth.backends.ModelBackend',
@@ -216,6 +217,9 @@ SOCIAL_AUTH_EMAIL_VALIDATION_FUNCTION = 'example.app.mail.send_validation'
 SOCIAL_AUTH_EMAIL_VALIDATION_URL = '/email-sent/'
 # SOCIAL_AUTH_USERNAME_FORM_URL = '/signup-username'
 SOCIAL_AUTH_USERNAME_FORM_HTML = 'username_signup.html'
+
+SOCIAL_AUTH_WECHAT_KEY = ""
+SOCIAL_AUTH_WECHAT_SECRET = ""
 
 SOCIAL_AUTH_PIPELINE = (
     'social.pipeline.social_auth.social_details',
