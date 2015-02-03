@@ -11,8 +11,8 @@ import hashlib
 from social.utils import parse_qs, constant_time_compare
 from social.backends.oauth import BaseOAuth2
 from social.exceptions import AuthException, AuthCanceled, AuthUnknownError, \
-                              AuthMissingParameter
-
+                              AuthMissingParameter, AuthTokenError
+import urllib, json
 
 class FacebookOAuth2(BaseOAuth2):
     """Facebook OAuth2 authentication backend"""
@@ -23,7 +23,11 @@ class FacebookOAuth2(BaseOAuth2):
     ACCESS_TOKEN_URL = 'https://graph.facebook.com/oauth/access_token'
     REVOKE_TOKEN_URL = 'https://graph.facebook.com/{uid}/permissions'
     REVOKE_TOKEN_METHOD = 'DELETE'
-    USER_DATA_URL = 'https://graph.facebook.com/me'
+    FB_GRAPH_BASE_URL = 'https://graph.facebook.com'
+    USER_DATA_RELATIVE_URL = "me"
+    ENSURE_TOKEN_SOURCE_RELATIVE_URL = "app"
+    USER_DATA_URL = FB_GRAPH_BASE_URL + '/' + USER_DATA_RELATIVE_URL
+
     EXTRA_DATA = [
         ('id', 'id'),
         ('expires', 'expires')
@@ -45,8 +49,42 @@ class FacebookOAuth2(BaseOAuth2):
     def user_data(self, access_token, *args, **kwargs):
         """Loads user data from service"""
         params = self.setting('PROFILE_EXTRA_PARAMS', {})
-        params['access_token'] = access_token
-        return self.get_json(self.USER_DATA_URL, params=params)
+        if kwargs.get("ensure_access_token_from_app"):
+            batch_data = {
+                'batch':[
+                    {
+                    'method': 'GET',
+                    'relative_url': self.ENSURE_TOKEN_SOURCE_RELATIVE_URL
+                    },
+                    {
+                    'method':'GET',
+                    'relative_url': self.USER_DATA_RELATIVE_URL + "/?" + urllib.urlencode(params)
+                    }
+                ]
+            }
+            response = self.request(
+                self.FB_GRAPH_BASE_URL,
+                method="POST",
+                params={"access_token":access_token},
+                data=json.dumps(batch_data),
+                headers={"Content-Type":"application/json"}
+                )
+            sub_responses = response.json()
+            self._batch_request_response_raise_for_status(response, sub_responses)
+            
+            token_response = json.loads(sub_responses[0]["body"])
+            if token_response["id"] != self.get_key_and_secret()[0]:
+                raise AuthTokenError()
+            user_data_response = json.loads(sub_responses[1]["body"])
+            return user_data_response
+        else:
+            params['access_token'] = access_token
+            return self.get_json(self.USER_DATA_URL, params=params)
+
+    def _batch_request_response_raise_for_status(self, response, response_json):
+        for sub_response in response_json:
+            response.status_code = sub_response["code"]
+            response.raise_for_status()
 
     def process_error(self, data):
         super(FacebookOAuth2, self).process_error(data)
@@ -86,7 +124,7 @@ class FacebookOAuth2(BaseOAuth2):
     def do_auth(self, access_token, response=None, *args, **kwargs):
         response = response or {}
 
-        data = self.user_data(access_token)
+        data = self.user_data(access_token, ensure_access_token_from_app=self.setting('FACEBOOK_ENSURE_TOKEN_SOURCE',False))
 
         if not isinstance(data, dict):
             # From time to time Facebook responds back a JSON with just
@@ -186,7 +224,10 @@ class Facebook2OAuth2(FacebookOAuth2):
     AUTHORIZATION_URL = 'https://www.facebook.com/v2.0/dialog/oauth'
     ACCESS_TOKEN_URL = 'https://graph.facebook.com/v2.0/oauth/access_token'
     REVOKE_TOKEN_URL = 'https://graph.facebook.com/v2.0/{uid}/permissions'
-    USER_DATA_URL = 'https://graph.facebook.com/v2.0/me'
+    FB_GRAPH_BASE_URL = 'https://graph.facebook.com/v2.0'
+    USER_DATA_RELATIVE_URL = "me"
+    ENSURE_TOKEN_SOURCE_RELATIVE_URL = "app"
+    USER_DATA_URL = FB_GRAPH_BASE_URL + '/' + USER_DATA_RELATIVE_URL
 
 
 class Facebook2AppOAuth2(Facebook2OAuth2, FacebookAppOAuth2):
