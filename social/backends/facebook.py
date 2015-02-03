@@ -74,7 +74,7 @@ class FacebookOAuth2(BaseOAuth2):
             
             token_response = json.loads(sub_responses[0]["body"])
             if token_response["id"] != self.get_key_and_secret()[0]:
-                raise AuthTokenError()
+                raise AuthTokenError(self)
             user_data_response = json.loads(sub_responses[1]["body"])
             return user_data_response
         else:
